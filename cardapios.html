@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardápios de Jantar Consolidados (Votação Supabase)</title>
+    <!-- Carregando Tailwind CSS CDN para design simples e moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuração do Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-dark': '#1F2937',
+                        'primary-light': '#F3F4F6',
+                        'accent': '#10B981', // Verde Suave, cor de destaque do Supabase
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilização para a tabela de detalhes do menu */
+        .menu-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #E5E7EB;
+            vertical-align: top;
+        }
+        .menu-table tr:last-child td {
+            border-bottom: none;
+        }
+        .menu-table th {
+            text-align: left;
+            font-weight: 600;
+            background-color: #F9FAFB;
+            padding: 8px 12px;
+        }
+        .vote-button {
+            transition: transform 0.1s ease-in-out, background-color 0.2s;
+        }
+        .vote-button:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .vote-button:disabled {
+            cursor: default;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="bg-primary-light font-sans text-gray-800 p-4 sm:p-8">
+
+    <header class="text-center mb-10">
+        <h1 class="text-4xl sm:text-5xl font-extrabold text-primary-dark mb-2">
+            Compilação de Menus de Jantar
+        </h1>
+        <p class="text-lg text-gray-600 mb-1">
+            Vote nos seus pratos favoritos!
+        </p>
+        <p class="text-md font-bold text-accent mb-4">
+            Sistema de votação em tempo real via Supabase.
+        </p>
+        <p id="status-message" class="text-xs text-gray-500">
+            Aguardando inicialização do Supabase...
+        </p>
+    </header>
+
+    <main id="menus-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        <!-- Os cards de menu serão gerados aqui pelo JavaScript -->
+    </main>
+
+    <script type="module">
+        // Importa o cliente Supabase
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        // ====================================================================
+        // !!! ATENÇÃO: SUBSTITUA ESSAS CREDENCIAIS PELAS DO SEU PROJETO SUPABASE !!!
+        // ====================================================================
+        const SUPABASE_URL = 'https://yyayufgoboagvifxanfc.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5YXl1ZmdvYm9hZ3ZpZnhhbmZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MzMzNzksImV4cCI6MjA4MDEwOTM3OX0.fjREIYRCBIVCYNsKFzag2DXi96cavDbRzxblTTUFVDA'; 
+        // ====================================================================
+        
+        let supabase = null;
+        let userId = null;
+        const statusElement = document.getElementById('status-message');
+        const dishVotesTable = 'global_votes'; // Tabela para contagem total de votos
+        const userVotesTable = 'user_votes'; // Tabela para rastrear votos do usuário
+
+        // Inicialização do Supabase e obtenção de ID anônimo
+        const initializeSupabase = async () => {
+            if (SUPABASE_URL === 'YOUR_SUPABASE_PROJECT_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+                statusElement.textContent = "ERRO: Credenciais do Supabase não configuradas. Votação desativada.";
+                console.error("ERRO: Por favor, insira a URL e a Chave Anônima do seu projeto Supabase.");
+                return;
+            }
+
+            supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            
+            // Gerar ou recuperar ID anônimo do usuário
+            let anonId = localStorage.getItem('anon_user_id');
+            if (!anonId) {
+                anonId = crypto.randomUUID();
+                localStorage.setItem('anon_user_id', anonId);
+            }
+            userId = anonId;
+            statusElement.textContent = `Supabase conectado. ID Anônimo: ${userId.substring(0, 8)}...`;
+
+            renderMenus();
+            setupGlobalVotesListener();
+            await setupUserVotesListener(); // Espera carregar votos antes de finalizar a renderização dos botões
+        };
+
+        // --- Estrutura de Dados dos Menus (mantida) ---
+
+        const menusData = [
+            { title: "1. Clássico Italiano Sofisticado 🇮🇹", description: "Celebra a culinária italiana com ingredientes frescos e sabores marcantes, apresentados de forma elegante.", courses: [{ course: "Aperitivo", dish: "Grissinis com Pesto de Manjericão e Limão Siciliano" }, { course: "Entrada", dish: "Carpaccio Clássico com Rúcula e Lascas de Parmesão" }, { course: "Principal", dish: "Saltimbocca de Vitela com Sálvia e Presunto de Parma" }, { course: "Sobremesa", dish: "Panna Cotta de Baunilha com Coulis de Frutas Vermelhas" }], drinks: [{ type: "Vinho (Tinto Médio)", suggestion: "Chianti Classico" }, { type: "Sem Álcool", suggestion: "Água aromatizada com laranja, alecrim e limão" }] },
+            { title: "2. Sabores do Mediterrâneo e do Mar 🌊", description: "Leveza, frescor e os aromas da culinária litorânea, com foco em azeites, ervas e frutos do mar.", courses: [{ course: "Aperitivo", dish: "Bruschettas de Tomate Cereja e Queijo Feta" }, { course: "Entrada", dish: "Salada Caprese Desconstruída com Redução Balsâmica" }, { course: "Principal", dish: "Peixe Branco Assado com Crosta de Ervas e Risoto de Limão Siciliano" }, { course: "Sobremesa", dish: "Torta Grega de Iogurte com Mel e Nozes" }], drinks: [{ type: "Vinho (Branco Seco)", suggestion: "Sauvignon Blanc" }, { type: "Sem Álcool", suggestion: "Limonada suíça com manjericão" }] },
+            { title: "3. Toques Orientais e Especiarias Suaves 🥢", description: "Uma jornada com temperos exóticos, combinando o doce, o salgado e o umami.", courses: [{ course: "Aperitivo", dish: "Edamame Cozido no Vapor com Flor de Sal e Pimenta Togarashi" }, { course: "Entrada", dish: "Rolinhos Primavera Frescos (Summer Rolls) com Molho de Amendoim" }, { course: "Principal", dish: "Curry Tailandês Vermelho de Frango com Arroz Jasmim" }, { course: "Sobremesa", dish: "Mousse de Chá Matcha e Chocolate Branco" }], drinks: [{ type: "Vinho (Branco Meio Seco)", suggestion: "Riesling ou Gewürztraminer" }, { type: "Sem Álcool", suggestion: "Chá de Jasmim gelado" }] },
+            { title: "4. Conforto Rústico Brasileiro Contemporâneo 🇧🇷", description: "Sabores familiares da cozinha brasileira, mas com apresentação e técnicas refinadas.", courses: [{ course: "Aperitivo", dish: "Dadinhos de Tapioca com Geléia de Pimenta Artesanal" }, { course: "Entrada", dish: "Caldo de Abóbora Cabotiá com Gengibre e Queijo Coalho Grelhado" }, { course: "Principal", dish: "Carne Seca Desfiada em Moranga (Mini) com Purê de Mandioca" }, { course: "Sobremesa", dish: "Romeu e Julieta Gourmet (Goiabada Cremosa e Mousse de Queijo)" }], drinks: [{ type: "Bebida", suggestion: "Cerveja Lager Premium ou Cachaça Ouro" }, { type: "Sem Álcool", suggestion: "Suco de Caju ou Laranja com gengibre" }] },
+            { title: "5. Bistrô Francês e Aconchegante 🇫🇷", description: "Menu clássico da culinária francesa, com preparações que demandam atenção, mas oferecem grande satisfação.", courses: [{ course: "Aperitivo", dish: "Queijo Brie Assado com Mel e Amêndoas Laminadas" }, { course: "Entrada", dish: "Sopa de Cebola Gratinada (Soupe à l'Oignon Gratinée)" }, { course: "Principal", dish: "Bœuf Bourguignon (Carne de Boi Cozida no Vinho Tinto)" }, { course: "Sobremesa", dish: "Crème Brûlée Clássico de Baunilha" }], drinks: [{ type: "Vinho (Tinto Leve/Médio)", suggestion: "Pinot Noir da Borgonha" }, { type: "Sem Álcool", suggestion: "Água com gás e xarope de frutas vermelhas" }] },
+            { title: "6. Essência de Minas 🧀", description: "Sabores mineiros familiares, com um toque rústico e reconfortante.", courses: [{ course: "Aperitivo", dish: "Pão de Queijo Recheado com Linguiça Artesanal" }, { course: "Entrada", dish: "Creme de Mandioca com Alho-Poró e Crispies de Bacon" }, { course: "Principal", dish: "Lombo Suíno Assado com Redução de Goiabada e Batatas Rústicas" }, { course: "Sobremesa", dish: "Tiramisù de Colher com Café e Doce de Leite" }], drinks: [{ type: "Cerveja", suggestion: "Cerveja Artesanal Vienna Lager ou IPA" }, { type: "Sem Álcool", suggestion: "Suco de Goiaba (natural)" }] },
+            { title: "7. Fresco e Tropical 🍍", description: "Um menu leve e vibrante, perfeito para dias quentes, explorando frutas e peixes.", courses: [{ course: "Aperitivo", dish: "Cubos de Queijo Minas Padrão Grelhados com Orégano" }, { course: "Entrada", dish: "Salada de Folhas Verdes com Manga e Tilápia Salteada" }, { course: "Principal", dish: "Medalhão de Frango Recheado com Queijo e Presunto" }, { course: "Sobremesa", dish: "Mousse de Maracujá com Crocante de Amendoim" }], drinks: [{ type: "Vinho (Branco Leve)", suggestion: "Vinho Verde (Leve e Frisante)" }, { type: "Sem Álcool", suggestion: "Água de Coco ou Chá Mate com limão" }] },
+            { title: "8. Inspiração Francesa Descomplicada 🥐", description: "Clássicos franceses adaptados para uma execução mais simples e rápida.", courses: [{ course: "Aperitivo", dish: "Torradinhas com Patê de Ricota e Ervas" }, { course: "Entrada", dish: "Quiche de Queijo e Presunto em Porções Individuais" }, { course: "Principal", dish: "Strogonoff de Carne Bovina com Champignon" }, { course: "Sobremesa", dish: "Crème Caramel (Pudim de Leite Condensado Caseiro)" }], drinks: [{ type: "Vinho", suggestion: "Rosé Seco (ou um Tinto leve como Gamay)" }, { type: "Sem Álcool", suggestion: "Suco de Uva Integral" }] },
+            { title: "9. Italiano Simples 🍝", description: "Sabores italianos rústicos e fáceis de preparar, focando em massas, queijos e empanados.", courses: [{ course: "Aperitivo", dish: "Bolinhas de Queijo Coalho com Tomate Seco no Azeite" }, { course: "Entrada", dish: "Salada de Batata Doce com Molho Pesto de Coentro" }, { course: "Principal", dish: "Filé Mignon Suíno à Milanesa (Escalope) com Molho de Limão" }, { course: "Sobremesa", dish: "Semifreddo de Morango e Biscoito" }], drinks: [{ type: "Vinho (Branco Leve)", suggestion: "Pinot Grigio ou Vermentino" }, { type: "Sem Álcool", suggestion: "Soda Italiana de Limão e Xarope de Gengibre" }] },
+            { title: "10. Um Pedaço do Nordeste ☀️", description: "Menu com ingredientes e preparos típicos nordestinos, ricos em sabor e tradição.", courses: [{ course: "Aperitivo", dish: "Cuscuz em Mini-Formas com Sardinha" }, { course: "Entrada", dish: "Acarajé Desconstruído e Vatapá de Copo" }, { course: "Principal", dish: "Escondidinho de Carne de Sol Cremoso" }, { course: "Sobremesa", dish: "Doce de Abóbora com Coco e Pedaços de Queijo Fresco" }], drinks: [{ type: "Cerveja", suggestion: "Cerveja Pilsen Artesanal (bem gelada)" }, { type: "Sem Álcool", suggestion: "Suco de Cajá ou Mangaba" }] },
+            { title: "11. Clássico Italiano 🇮🇹 (Elegante)", description: "Elegância e acidez equilibrada. Foco em frescor.", courses: [{ course: "Aperitivo", dish: "Bruschetta Clássica" }, { course: "Entrada", dish: "Salada Caprese Desconstruída" }, { course: "Principal", dish: "Saltimbocca alla Romana" }, { course: "Sobremesa", dish: "Panna Cotta com Calda de Frutas Vermelhas" }], drinks: [{ type: "Vinho (Tinto Seco)", suggestion: "Chianti" }, { type: "Sem Álcool", suggestion: "Água com gás, limão e hortelã" }] },
+            { title: "12. Francês Elegante 🇫🇷", description: "Focado na técnica e no sabor profundo, para um resultado requintado.", courses: [{ course: "Aperitivo", dish: "Gougères (Puffs de Queijo)" }, { course: "Entrada", dish: "Sopa de Cebola Gratinada (Soupe à l'Oignon Gratinée)" }, { course: "Principal", dish: "Frango Assado com Ervas de Provence e Batatas ao Murro" }, { course: "Sobremesa", dish: "Crème Brûlée Clássico" }], drinks: [{ type: "Vinho (Branco Seco)", suggestion: "Sancerre" }, { type: "Sem Álcool", suggestion: "Chá gelado de pêssego e camomila" }] },
+            { title: "13. Mediterrâneo Leve ☀️", description: "Prioriza ingredientes frescos e o equilíbrio entre o ácido e o salgado.", courses: [{ course: "Aperitivo", dish: "Homus com Pão Pita Artesanal" }, { course: "Entrada", dish: "Salada Grega (Horiatiki)" }, { course: "Principal", dish: "Peixe Grelhado ao Molho de Limão e Alcaparras" }, { course: "Sobremesa", dish: "Iogurte Grego com Mel e Nozes" }], drinks: [{ type: "Vinho (Branco Leve)", suggestion: "Albariño" }, { type: "Sem Álcool", suggestion: "Limonada Siciliana" }] },
+            { title: "14. Fusão e Conforto 🌶️", description: "Traz notas levemente picantes e defumadas, focando em pratos reconfortantes.", courses: [{ course: "Aperitivo", dish: "Mini Quiches de Alho-Poró" }, { course: "Entrada", dish: "Creme de Abóbora com Gengibre e Croûtons" }, { course: "Principal", dish: "Filé Mignon ao Molho de Vinho Tinto e Purê Rústico" }, { course: "Sobremesa", dish: "Mousse de Chocolate Amargo com Flor de Sal" }], drinks: [{ type: "Vinho (Tinto Médio)", suggestion: "Merlot" }, { type: "Sem Álcool", suggestion: "Suco de Cranberry com Gengibre" }] },
+            { title: "15. Vegetariano e Texturas 🌿", description: "Riqueza de texturas e sabor intenso dos vegetais e cogumelos.", courses: [{ course: "Aperitivo", dish: "Ovos Recheados (Deviled Eggs) com Páprica Defumada" }, { course: "Entrada", dish: "Torre de Berinjela Caprese (Melanzane a Torretta)" }, { course: "Principal", dish: "Risoto de Cogumelos Frescos" }, { course: "Sobremesa", dish: "Tiramisu Clássico" }], drinks: [{ type: "Vinho (Tinto Leve)", suggestion: "Pinot Noir" }, { type: "Sem Álcool", suggestion: "Suco de Uva Integral gelado" }] }
+        ];
+
+        // Variáveis de estado
+        let globalVotes = {}; // { dishId: count }
+        let userVotedDishes = {}; // { dishId: true }
+
+
+        // --- Funções Auxiliares ---
+
+        /**
+         * Gera um ID único e estável para um prato, baseado no índice do menu e no curso.
+         */
+        const generateDishId = (menuIndex, courseName) => {
+            const cleanTitle = menusData[menuIndex].title.replace(/[^a-zA-Z0-9]/g, '');
+            const cleanCourse = courseName.replace(/[^a-zA-Z0-9]/g, '');
+            return `${cleanTitle}_${cleanCourse}`.toLowerCase();
+        };
+
+        /**
+         * Atualiza a aparência do botão de voto (cor e texto).
+         */
+        const updateVoteButtonState = (dishId, hasVoted) => {
+            const button = document.getElementById(`button-${dishId}`);
+            if (button) {
+                if (hasVoted) {
+                    button.textContent = '❤️ Votado';
+                    button.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                    button.classList.add('bg-accent', 'text-white');
+                    button.disabled = true;
+                } else {
+                    button.textContent = '🤍 Votar';
+                    button.classList.remove('bg-accent', 'text-white');
+                    button.classList.add('bg-gray-100', 'hover:bg-gray-200');
+                    button.disabled = false;
+                }
+            }
+        };
+
+
+        // --- Funções do Supabase (Substituindo o Firebase) ---
+
+        /**
+         * 1. Configura o ouvinte Realtime para os votos globais.
+         * Requer uma política de RLS (Row Level Security) que permita SELECT público na tabela 'global_votes'.
+         */
+        const setupGlobalVotesListener = () => {
+            if (!supabase) return;
+
+            // Escuta mudanças em tempo real na tabela de votos globais
+            supabase
+                .channel('public:global_votes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: dishVotesTable }, (payload) => {
+                    const dishId = payload.new?.dish_id || payload.old?.dish_id;
+                    const votes = payload.new?.votes || 0;
+                    
+                    if (dishId) {
+                        globalVotes[dishId] = votes;
+                        // Atualiza o contador na UI
+                        const counterElement = document.getElementById(`votes-${dishId}`);
+                        if (counterElement) {
+                            counterElement.textContent = votes;
+                        }
+                    }
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        // Após a subscrição, carrega o estado inicial
+                        loadInitialGlobalVotes();
+                    }
+                });
+        };
+
+        /**
+         * Carrega o estado inicial de todos os votos globais (necessário antes do Realtime).
+         */
+        const loadInitialGlobalVotes = async () => {
+            if (!supabase) return;
+            const { data, error } = await supabase
+                .from(dishVotesTable)
+                .select('dish_id, votes');
+            
+            if (error) {
+                console.error("Erro ao carregar votos globais iniciais:", error);
+                return;
+            }
+
+            data.forEach(item => {
+                globalVotes[item.dish_id] = item.votes;
+                const counterElement = document.getElementById(`votes-${item.dish_id}`);
+                if (counterElement) {
+                    counterElement.textContent = item.votes;
+                }
+            });
+        };
+
+
+        /**
+         * 2. Carrega o histórico de votos do usuário anônimo.
+         * Requer uma política de RLS que permita SELECT com filtro user_id.
+         */
+        const setupUserVotesListener = async () => {
+            if (!supabase || !userId) return;
+
+            const { data, error } = await supabase
+                .from(userVotesTable)
+                .select('dish_id')
+                .eq('user_id', userId);
+
+            if (error) {
+                console.error("Erro ao carregar votos do usuário:", error);
+                return;
+            }
+            
+            userVotedDishes = {};
+            data.forEach(item => {
+                userVotedDishes[item.dish_id] = true;
+                updateVoteButtonState(item.dish_id, true);
+            });
+        };
+
+
+        /**
+         * 3. Função principal de votação.
+         * Garante que o usuário vote apenas uma vez (verificando a tabela user_votes)
+         * e incrementa o contador global.
+         */
+        window.handleVote = async (dishId) => {
+            if (!supabase || !userId) {
+                console.error("Supabase não inicializado ou ID do usuário ausente.");
+                return;
+            }
+
+            if (userVotedDishes[dishId]) {
+                console.log("Usuário já votou neste prato.");
+                return;
+            }
+
+            const button = document.getElementById(`button-${dishId}`);
+            if (button) button.disabled = true; // Desabilita temporariamente
+
+            try {
+                // Tenta registrar o voto na tabela de histórico do usuário
+                const { error: insertError } = await supabase
+                    .from(userVotesTable)
+                    .insert([
+                        { user_id: userId, dish_id: dishId }
+                    ]);
+
+                if (insertError) {
+                    // Se o erro for de duplicidade (único constraint), apenas ignora e sai.
+                    // Caso contrário, registra o erro.
+                    if (insertError.code === '23505') { // Código de erro SQL para Unique Violation
+                        console.log("Voto duplicado detectado (Unique Constraint).");
+                    } else {
+                        throw insertError;
+                    }
+                }
+
+                // Incrementa o voto na tabela global.
+                // Esta operação faz um UPSERT (cria se não existir, atualiza se existir).
+                // O incremento real deve ser feito no backend via `rpc` ou `trigger`, mas 
+                // para o exemplo simples, simulamos com um update otimista ou relying on a trigger.
+                
+                // Opção 1: Uso de RPC (função do Supabase) - Mais seguro.
+                // NOTE: Você precisaria criar a função `increment_vote` no seu Supabase:
+                /*
+                const { error: rpcError } = await supabase.rpc('increment_vote', {
+                    p_dish_id: dishId
+                });
+                if (rpcError) throw rpcError;
+                */
+                
+                // Opção 2: Update otimista (simples, mas menos atômico)
+                const currentVotes = globalVotes[dishId] || 0;
+                const { error: updateError } = await supabase
+                    .from(dishVotesTable)
+                    .upsert({ 
+                        dish_id: dishId, 
+                        votes: currentVotes + 1 // Incremento otimista, Realtime corrige.
+                    }, { onConflict: 'dish_id' });
+                
+                if (updateError) throw updateError;
+
+
+                // Sucesso: atualiza o estado local e o botão
+                userVotedDishes[dishId] = true;
+                updateVoteButtonState(dishId, true);
+                
+                // A contagem global será atualizada automaticamente pelo Realtime Listener
+                
+            } catch (error) {
+                console.error("Erro ao votar:", error);
+                // Reabilita o botão em caso de falha (exceto se for duplicidade, onde já desabilitamos)
+                updateVoteButtonState(dishId, userVotedDishes[dishId] || false);
+                alert(`Erro ao registrar voto. Verifique a configuração do Supabase e as políticas de RLS. Detalhe: ${error.message}`);
+            }
+        };
+
+
+        // --- Renderização do HTML (Com Ajuste de Layout) ---
+
+        const menusContainer = document.getElementById('menus-container');
+
+        const renderMenus = () => {
+            menusContainer.innerHTML = '';
+            menusData.forEach((menu, menuIndex) => {
+                
+                let coursesHtml = '';
+                menu.courses.forEach(item => {
+                    const dishId = generateDishId(menuIndex, item.course);
+                    
+                    // --- NOVO LAYOUT: Voto ABAIXO do Prato ---
+                    coursesHtml += `
+                        <tr class="dish-row" data-dish-id="${dishId}">
+                            <!-- Coluna do Tipo de Prato -->
+                            <td class="font-semibold w-1/4 text-primary-dark">${item.course}</td>
+                            
+                            <!-- Coluna do Prato + Votação (Empilhados Verticalmente) -->
+                            <td class="w-3/4">
+                                <div class="font-medium text-gray-800 mb-1">${item.dish}</div>
+                                
+                                <div class="flex items-center space-x-3 mt-1">
+                                    <!-- Botão de Voto -->
+                                    <button
+                                        id="button-${dishId}"
+                                        onclick="handleVote('${dishId}')"
+                                        class="vote-button text-xs font-semibold p-1 px-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-default whitespace-nowrap"
+                                        aria-label="Votar no prato ${item.dish}"
+                                    >
+                                        🤍 Votar
+                                    </button>
+                                    <!-- Contador de Votos (Exibição em tempo real) -->
+                                    <div class="flex items-center text-sm font-bold text-gray-600">
+                                        <span id="votes-${dishId}" class="w-4 text-left text-accent">0</span>
+                                        <span class="text-xs text-gray-500">votos</span>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    // --- FIM DO NOVO LAYOUT ---
+                });
+
+                // Criação da tabela de bebidas
+                const drinksTable = menu.drinks.map(item => `
+                    <tr>
+                        <td class="font-medium w-2/5 text-gray-700">${item.type}</td>
+                        <td class="w-3/5 text-gray-600 font-medium">${item.suggestion}</td>
+                    </tr>
+                `).join('');
+
+
+                const menuCard = `
+                    <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition duration-300 overflow-hidden border-t-4 border-accent p-6 flex flex-col">
+                        <!-- Título e Descrição -->
+                        <div class="mb-4">
+                            <h2 class="text-2xl font-bold text-primary-dark mb-1">${menu.title}</h2>
+                            <p class="text-sm text-gray-500 italic">${menu.description}</p>
+                        </div>
+
+                        <!-- Detalhes dos Pratos e Votação -->
+                        <div class="mb-6 flex-grow">
+                            <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 mb-2">Pratos</h3>
+                            <table class="w-full menu-table text-sm">
+                                <tbody>
+                                    ${coursesHtml}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Sugestão de Bebidas -->
+                        <div class="pt-4 border-t border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 mb-2">Harmonização Sugerida</h3>
+                            <table class="w-full menu-table text-sm">
+                                <tbody>
+                                    ${drinksTable}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                menusContainer.innerHTML += menuCard;
+            });
+        };
+        
+        // Inicia a aplicação
+        initializeSupabase();
+
+    </script>
+</body>
+</html>
