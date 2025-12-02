@@ -9,6 +9,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <!-- Incluindo Supabase Client Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Incluindo html2canvas para captura de tela -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
         /* Estilos personalizados */
         body {
@@ -53,10 +55,11 @@
         }
         /* Estilo de erro para destacar grupos não preenchidos */
         .validation-error {
-            border-color: #ff0000;
-            background-color: #ff00001a;
-            border-radius: 0.5rem;
-            padding: 0.5rem;
+            /* IMPORTANTE: Destaque visual forte e animação para garantir que o usuário perceba */
+            border: 2px solid #ff4d4d !important; /* Vermelho mais forte */
+            background-color: #ff4d4d1a !important; /* Fundo vermelho leve */
+            border-radius: 0.75rem; /* Um pouco mais arredondado */
+            padding: 0.75rem; /* Um pouco mais de padding */
             animation: shake 0.5s;
         }
         @keyframes shake {
@@ -70,6 +73,27 @@
             border: 2px solid #00ff88;
             box-shadow: 0 0 20px rgba(0, 250, 154, 0.5);
         }
+        /* Botão secundário para copiar */
+        .btn-secondary {
+            background-color: #30363d;
+            color: #e5e7eb;
+            transition: background-color 0.3s;
+            border: 1px solid #00ff88;
+        }
+        .btn-secondary:hover {
+            background-color: #444c56;
+        }
+        /* Botão de download */
+        .btn-download {
+            background-color: #00b894;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .btn-download:hover {
+            background-color: #00a085;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
+        }
 
         /* Estilos específicos para impressão: esconde elementos desnecessários */
         @media print {
@@ -82,8 +106,8 @@
                 border: none !important;
                 background-color: #fff !important;
             }
-            .btn-primary {
-                display: none; /* Esconde o botão de imprimir */
+            .btn-primary, .btn-secondary {
+                display: none; /* Esconde os botões de ação */
             }
             /* Garante que o conteúdo seja visível na impressão */
             .header-title, .text-white, .text-[#00ff88], .text-gray-400 {
@@ -96,13 +120,211 @@
                 color-adjust: exact;
             }
         }
+        
+        /* Estilo para o modal de captura */
+        .capture-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .capture-modal.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .capture-preview {
+            max-width: 90%;
+            max-height: 90%;
+            border: 3px solid #00ff88;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 250, 154, 0.5);
+        }
+        
+        .capture-loading {
+            color: #00ff88;
+            font-size: 1.2rem;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .capture-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Estilos para a nova etapa de pacote */
+        .package-card {
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .package-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 250, 154, 0.2);
+        }
+        
+        .package-card.selected {
+            border-color: #00ff88;
+            background: linear-gradient(145deg, #00ff8810, #00ff8805);
+            box-shadow: 0 0 20px rgba(0, 250, 154, 0.3);
+        }
+        
+        .package-card.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .badge-premium {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #000;
+            font-weight: bold;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        
+        .badge-promo {
+            background: linear-gradient(45deg, #FF4444, #FF6B6B);
+            color: white;
+            font-weight: bold;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .price-old {
+            text-decoration: line-through;
+            color: #888;
+            font-size: 1.2rem;
+        }
+        
+        .price-new {
+            color: #00ff88;
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+        
+        .discount-badge {
+            background-color: #ff4444;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        
+        .benefit-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .benefit-icon {
+            color: #00ff88;
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .ribbon {
+            position: absolute;
+            top: 15px;
+            left: -35px;
+            background: linear-gradient(45deg, #FF4444, #FF6B6B);
+            color: white;
+            padding: 5px 40px;
+            transform: rotate(-45deg);
+            font-weight: bold;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .featured-badge {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #000;
+            font-weight: bold;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            display: inline-block;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+            animation: glow 2s infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { box-shadow: 0 0 10px rgba(255, 215, 0, 0.4); }
+            to { box-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
+        }
+        
+        .countdown-timer {
+            background: linear-gradient(45deg, #1c232c, #0d1117);
+            border: 2px solid #ff4444;
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            margin-top: 20px;
+            box-shadow: 0 0 15px rgba(255, 68, 68, 0.3);
+        }
+        
+        .countdown-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ff4444;
+            text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+        }
+        
+        .countdown-label {
+            font-size: 0.8rem;
+            color: #aaa;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body class="p-4 sm:p-8 min-h-screen flex items-start justify-center">
 
     <div id="app-container" class="w-full max-w-4xl p-6 md:p-10 rounded-xl card my-8">
         
-        <!-- Área de Mensagens de Status -->
+        <!-- Área de Mensagens de Status GLOBAL (Login e Feedback de Cópia) -->
         <div id="message-area" class="mb-4 hidden">
             <div id="status-message" class="p-3 rounded-lg text-center font-semibold"></div>
         </div>
@@ -117,10 +339,20 @@
 
     </div>
 
+    <!-- Modal para visualizar captura de tela -->
+    <div id="capture-modal" class="capture-modal">
+        <button id="close-capture" class="capture-close">&times;</button>
+        <div id="capture-loading" class="capture-loading hidden">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500 mx-auto mb-4"></div>
+            Gerando captura de tela...
+        </div>
+        <img id="capture-preview" class="capture-preview hidden" alt="Pré-visualização da captura">
+    </div>
+
     <!-- Supabase Logic -->
     <script type="module">
         // 🚨 CONFIGURAÇÃO SUPABASE: SUBSTITUA COM SEUS DADOS REAIS 🚨
-		const SUPABASE_URL = 'https://yyayufgoboagvifxanfc.supabase.co'; 
+        const SUPABASE_URL = 'https://yyayufgoboagvifxanfc.supabase.co'; 
 		const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5YXl1ZmdvYm9hZ3ZpZnhhbmZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MzMzNzksImV4cCI6MjA4MDEwOTM3OX0.fjREIYRCBIVCYNsKFzag2DXi96cavDbRzxblTTUFVDA'; 
 
 
@@ -132,6 +364,7 @@
         let novoCodigoConvite = null; // Código gerado pelo cliente
         let reservationData = {}; 
         let currentStep = 'loading'; 
+        let selectedPackage = 'promocional'; // Valor padrão
 
         // --- Inicialização e Configuração ---
 
@@ -213,6 +446,10 @@
                     html = renderRegistrationStep();
                     break;
                 
+                case 'pacote':
+                    html = renderPackageSelectionStep();
+                    break;
+                
                 case 'menu':
                     html = renderMenuSelectionStep();
                     break;
@@ -237,9 +474,194 @@
                 document.getElementById('login-form')?.addEventListener('submit', handleLogin);
             } else if (currentStep === 'cadastro') {
                 document.getElementById('cadastro-form')?.addEventListener('submit', handleRegistration);
+            } else if (currentStep === 'pacote') {
+                // Adiciona listener para o formulário de pacote
+                document.getElementById('pacote-form')?.addEventListener('submit', handlePackageSelection);
+                // Marca automaticamente o pacote promocional
+                setTimeout(() => {
+                    const promoRadio = document.getElementById('pacote-promocional');
+                    if (promoRadio) {
+                        promoRadio.checked = true;
+                        const promoCard = document.getElementById('pacote-promocional-card');
+                        if (promoCard) {
+                            promoCard.classList.add('selected');
+                        }
+                    }
+                }, 100);
             } else if (currentStep === 'menu') {
                 document.getElementById('menu-form')?.addEventListener('submit', handleMenuSelection);
+                // Adiciona event listeners para os radios para limpar erros quando selecionados
+                document.querySelectorAll('input[type="radio"]').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        const container = document.getElementById(`group-container-${this.name}`);
+                        if (container) {
+                            container.classList.remove('validation-error');
+                        }
+                    });
+                });
             }
+            // Rola para o topo na tela de sucesso
+            else if (currentStep === 'success') {
+                // Adiciona listener para o novo botão de cópia e captura
+                document.getElementById('copy-details-btn')?.addEventListener('click', handleCopyAndCapture);
+                
+                // Adiciona listener para o botão de fechar no modal
+                document.getElementById('close-capture')?.addEventListener('click', closeCaptureModal);
+
+                setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    document.getElementById('app-container')?.focus({ preventScroll: true }); 
+                }, 100);
+            }
+        }
+
+        // --- Funções de Captura de Tela ---
+
+        /** Captura a tela da aplicação e faz o download automático */
+        async function captureAndDownloadScreen() {
+            try {
+                // Mostra o modal de carregamento
+                const captureModal = document.getElementById('capture-modal');
+                const captureLoading = document.getElementById('capture-loading');
+                const capturePreview = document.getElementById('capture-preview');
+                
+                captureModal.classList.add('active');
+                captureLoading.classList.remove('hidden');
+                capturePreview.classList.add('hidden');
+                
+                // Captura o container principal da aplicação
+                const appContainer = document.getElementById('app-container');
+                
+                // Usa html2canvas para capturar a tela
+                const canvas = await html2canvas(appContainer, {
+                    scale: 2, // Maior qualidade
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#161b22',
+                    onclone: function(clonedDoc) {
+                        // Ajusta estilos para a captura
+                        const clonedContainer = clonedDoc.getElementById('app-container');
+                        if (clonedContainer) {
+                            clonedContainer.style.boxShadow = '0 4px 6px rgba(0, 250, 154, 0.2)';
+                        }
+                    }
+                });
+                
+                // Converte canvas para imagem
+                const imageData = canvas.toDataURL('image/png');
+                
+                // Mostra pré-visualização
+                capturePreview.src = imageData;
+                captureLoading.classList.add('hidden');
+                capturePreview.classList.remove('hidden');
+                
+                // Aguarda um momento para o usuário ver a pré-visualização
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Cria link para download
+                const downloadLink = document.createElement('a');
+                const fileName = `reserva-jantar-encantado-${new Date().toISOString().slice(0,10)}.png`;
+                
+                downloadLink.href = imageData;
+                downloadLink.download = fileName;
+                
+                // Inicia o download
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                
+                // Fecha o modal após 1.5 segundos (tempo para o download iniciar)
+                setTimeout(() => {
+                    closeCaptureModal();
+                    showMessage("Captura de tela baixada com sucesso!");
+                }, 1500);
+                
+            } catch (error) {
+                console.error('Erro ao capturar tela:', error);
+                closeCaptureModal();
+                showMessage('Erro ao capturar a tela. Tente novamente.', true);
+            }
+        }
+
+        /** Fecha o modal de captura */
+        function closeCaptureModal() {
+            const captureModal = document.getElementById('capture-modal');
+            const captureLoading = document.getElementById('capture-loading');
+            const capturePreview = document.getElementById('capture-preview');
+            
+            captureModal.classList.remove('active');
+            captureLoading.classList.add('hidden');
+            capturePreview.classList.add('hidden');
+        }
+
+        // --- Funções de Cópia e Captura Combinadas ---
+
+        /** Copia os detalhes da reserva e captura a tela */
+        function handleCopyAndCapture() {
+            // Primeiro, copia os detalhes da reserva
+            copyReservationDetails();
+            
+            // Depois, após um pequeno delay, captura a tela
+            setTimeout(() => {
+                captureAndDownloadScreen();
+            }, 300);
+        }
+
+        /** Copia os detalhes da reserva para a área de transferência. */
+        function copyReservationDetails() {
+            // Monta o texto completo com o código de convite
+            const reservationText = `
+--- DETALHES DA RESERVA JANTAR ENCANTADO ---
+Nome: ${reservationData.nome}
+Infusão: ${reservationData.infusao}
+Convidado por: ${convidadoPorNome || reservationData.convidado_por || 'N/A'}
+Pacote: ${selectedPackage === 'premium' ? 'Premium (R$ 289,90)' : 'Promocional (R$ 190,00)'}
+
+Cardápio Escolhido:
+Aperitivo: ${reservationData.aperitivo}
+Entrada: ${reservationData.entrada}
+Prato Principal: ${reservationData.principal}
+Sobremesa: ${reservationData.sobremesa}
+Bebida: ${reservationData.bebida}
+
+Local: CASA JARDIM : Rua São Miguel, 42 - Santo Antonio, Viçosa - MG
+Início: 17:20h
+---
+SEU CÓDIGO DE CONVITE: ${novoCodigoConvite || 'Falha ao Gerar Código'}
+Envie este código para um amigo!
+`.trim();
+
+            // Usa a forma moderna, mas com fallback para execCommand
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(reservationText).then(() => {
+                    // Mensagem será mostrada pela função de captura de tela
+                }).catch(err => {
+                    console.error('Falha ao copiar (Clipboard API):', err);
+                    fallbackCopyTextToClipboard(reservationText);
+                });
+            } else {
+                fallbackCopyTextToClipboard(reservationText);
+            }
+        }
+        
+        /** Fallback para dispositivos mais antigos ou iFrames restritos */
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            // Torna o textarea invisível e fora da tela
+            textArea.style.position = "fixed";
+            textArea.style.top = "-9999px";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+            } catch (err) {
+                console.error('Falha ao copiar (execCommand):', err);
+            }
+            document.body.removeChild(textArea);
         }
 
         // --- Renderização de Etapas ---
@@ -330,10 +752,20 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                         </div>
                     </div>
 
+                    <!-- DATA DE NASCIMENTO: Três campos de entrada -->
                     <div>
-                        <label for="nascimento" class="block text-sm font-medium mb-1">Data de Nascimento</label>
-                        <input type="date" id="nascimento" name="nascimento" required 
-                               class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88]">
+                        <label class="block text-sm font-medium mb-1">Data de Nascimento (DD/MM/AAAA)</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <input type="number" id="nascimento_dia" name="nascimento_dia" required min="1" max="31"
+                                   class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88] text-center"
+                                   placeholder="Dia">
+                            <input type="number" id="nascimento_mes" name="nascimento_mes" required min="1" max="12"
+                                   class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88] text-center"
+                                   placeholder="Mês">
+                            <input type="number" id="nascimento_ano" name="nascimento_ano" required min="1900" max="2099"
+                                   class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88] text-center"
+                                   placeholder="Ano">
+                        </div>
                     </div>
 
                     <div class="pt-4">
@@ -354,8 +786,148 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
 
                     <div class="pt-6">
                         <button type="submit" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase">
-                            Continuar para o Menu
+                            Continuar para Escolha do Pacote
                         </button>
+                    </div>
+                </form>
+            `;
+        }
+
+        function renderPackageSelectionStep() {
+            return `
+                <h1 class="text-3xl font-bold header-title text-center mb-6">🎉 Escolha Seu Pacote de Experiência!</h1>
+                <p class="text-center text-gray-400 mb-8 text-lg">Selecione a opção perfeita para sua noite encantada</p>
+                
+                <!-- Badge em destaque -->
+                <div class="text-center mb-8">
+                    <div class="featured-badge">🔥 PROMOÇÃO DE INAUGURAÇÃO EXCLUSIVA! 🔥</div>
+                </div>
+                
+                
+                <form id="pacote-form" class="space-y-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Pacote Premium (Indisponível) -->
+                        <div class="relative">
+                            <div class="ribbon">INDISPONÍVEL</div>
+                            <div id="pacote-premium-card" class="package-card disabled p-6 rounded-xl h-full flex flex-col">
+                                <div class="flex-grow">
+                                    <div class="badge-premium">PREMIUM</div>
+									<p class="text-gray-400 mb-6"></br></p>
+                                    <h3 class="text-2xl font-bold text-white mb-4">Experiência Completa</h3>
+                                    <p class="text-gray-400 mb-6">Para quem busca o máximo de sofisticação e exclusividade</p>
+                                    
+                                    <div class="mb-6">
+                                        <div class="price-new text-center mb-4">R$ 289,90</div>
+                                        <p class="text-center text-gray-400 text-sm">(preço regular)</p>
+                                    </div>
+                                    
+                                    <div class="space-y-4 mb-8">
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">✓</span>
+                                            <span>Menu degustação completo 4 pratos</span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">✓</span>
+                                            <span>Seleção individual de pratos</span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">✓</span>
+                                            <span>Opçoes veganas</span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">✓</span>
+                                            <span>Experiência sensorial inigualável</span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">✓</span>
+                                            <span>Atendimento VIP personalizado</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-auto">
+                                    <div class="text-center mb-4">
+                                        <span class="text-red-400 font-bold">🔒 Temporariamente Indisponível</span>
+                                    </div>
+                                    <label class="block cursor-not-allowed">
+                                        <input type="radio" id="pacote-premium" name="pacote" value="premium" class="hidden" disabled>
+                                        <div class="w-full p-4 rounded-lg text-center bg-gray-900 text-gray-500 font-semibold">
+                                            SELECIONAR PACOTE PREMIUM
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Pacote Promocional (Selecionado por padrão) -->
+                        <div class="relative">
+                            <div id="pacote-promocional-card" class="package-card selected p-6 rounded-xl h-full flex flex-col border-2 border-[#ff4444]">
+                                <div class="flex-grow">
+                                    <div class="badge-promo">🔥 PROMOÇÃO!</div>
+									<p class="text-gray-400 mb-6"></br></p>
+                                    <h3 class="text-2xl font-bold text-white mb-4">Jantar Encantado VIP</h3>
+                                    <p class="text-gray-400 mb-6">Oferta especial de inauguração - Experiência completa por um preço irresistível!</p>
+                                    
+                                    <div class="mb-6">
+                                        <div class="price-old text-center mb-2">De: R$ 289,90</div>
+                                        <div class="price-new text-center mb-2">Por apenas: R$ 190,00</div>
+                                        <div class="text-center">
+                                            <span class="discount-badge">34% DE DESCONTO</span>
+                                        </div>
+                                        <p class="text-center text-gray-400 text-sm mt-2">Economize R$ 99,90!</p>
+                                    </div>
+                                    
+                                    <div class="space-y-4 mb-8">
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">🎁</span>
+                                            <span><strong>Menu degustação completo 4 pratos</strong></span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">🎁</span>
+                                            <span><strong>Seleção individual de pratos</strong></span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">🎁</span>
+                                            <span><strong>Experiência Sensorial inigualável</strong></span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">🎁</span>
+                                            <span><strong>Opções de pratos veganos</strong></span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">🎁</span>
+                                            <span><strong>Ambiente exclusivo e intimista</strong></span>
+                                        </div>
+                                        <div class="benefit-item">
+                                            <span class="benefit-icon">⚡</span>
+                                            <span><strong>BÔNUS:</strong>Ganhe 1 código de convite personalizado e gere desconto em sua reserva!</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-auto">
+                                    <div class="text-center mb-4">
+                                        <span class="text-[#00ff88] font-bold text-lg">⭐ RECOMENDADO PELA EQUIPE ⭐</span>
+                                    </div>
+                                    <label class="block cursor-pointer">
+                                        <input type="radio" id="pacote-promocional" name="pacote" value="promocional" class="hidden" checked>
+                                        <div class="w-full p-4 rounded-lg text-center bg-gradient-to-r from-[#ff4444] to-[#ff6b6b] text-white font-bold text-lg hover:from-[#ff3333] hover:to-[#ff5555] transition-all duration-300 shadow-lg hover:shadow-xl">
+                                            🎯 SELECIONAR PACOTE PROMOCIONAL
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Botão de continuar -->
+                    <div class="pt-6">
+                        <button type="submit" class="w-full btn-primary p-4 rounded-lg font-bold text-xl uppercase tracking-wider shadow-lg hover:shadow-xl transition-all duration-300">
+                            🍽️ AVANÇAR PARA SELEÇÃO DO MENU
+                        </button>
+                        <p class="text-center text-gray-400 mt-4 text-sm">
+                            ⚡ <strong>Oferta válida apenas para reservas realizadas hoje!</strong>
+                        </p>
                     </div>
                 </form>
             `;
@@ -363,37 +935,58 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
 
         function renderMenuSelectionStep() {
             const menuItems = {
-                aperitivo: { title: 'Aperitivo', options: ['Coxinha de Jaca', 'Bruschetta'] },
-                entrada: { title: 'Entrada', options: ['Creme de abóbora', 'Salada Caesar/Caprese'] },
-                principal: { title: 'Prato Principal', options: ['Nhoc ao molho pesto acompanhado de tiras de carne', 'Risoto de tomate acompanhado de tiras de carne'] },
-                sobremesa: { title: 'Sobremesa', options: ['Iogurte assado com compota de frutas', 'Iogurte assado com compota de frutas (vegano)'] },
-                // ITEM: BEBIDAS
-                bebida: { title: 'Bebida', options: ['Chá de Hibisco', 'Suco de manga'] },
+                aperitivo: { title: 'Aperitivo', options: ['1. Coxinha de Jaca', '2. Bruschetta'] },
+                entrada: { title: 'Entrada', options: ['1. Creme de abóbora', '2. Salada Caesar/Caprese'] },
+                principal: { title: 'Prato Principal', options: ['1. Nhoc ao molho pesto acompanhado de tiras de carne', '2. Risoto de tomate acompanhado de tiras de carne'] },
+                sobremesa: { title: 'Sobremesa', options: ['1. Iogurte assado com compota de frutas', '2. Iogurte assado com compota de frutas (vegano)'] },
+                bebida: { title: 'Bebida', options: ['1. Chá de Hibisco', '2. Suco de manga'] },
             };
 
             return `
-                <h1 class="text-3xl font-bold header-title text-center mb-4">Passo 2: Seleção do Menu</h1>
-                <p class="text-center text-gray-400 mb-8">Por favor, escolha uma opção para cada prato.</p>
+                <h1 class="text-3xl font-bold header-title text-center mb-4">Passo 3: Personalize Seu Menu</h1>
+                <p class="text-center text-gray-400 mb-8">Escolha suas opções preferidas para cada prato do seu <strong>Pacote ${selectedPackage === 'premium' ? 'Premium' : 'Promocional'}</strong></p>
                 
+                <!-- Resumo do pacote selecionado -->
+                <div class="mb-8 p-6 rounded-lg bg-gradient-to-r from-[#00ff8810] to-[#00ff8805] border-l-4 border-[#00ff88]">
+                    <div class="flex flex-col md:flex-row justify-between items-center">
+                        <div>
+                            <h2 class="text-2xl font-bold mb-2">Pacote Selecionado: <span class="text-[#00ff88]">${selectedPackage === 'premium' ? 'Experiência Premium' : 'Jantar Encantado VIP'}</span></h2>
+                            <p class="text-sm text-gray-400">${selectedPackage === 'premium' ? 'R$ 289,90' : 'R$ 190,00 (Promoção de Inauguração!)'}</p>
+                        </div>
+                        <div class="mt-4 md:mt-0">
+                            <span class="px-4 py-2 rounded-full ${selectedPackage === 'premium' ? 'bg-gradient-to-r from-yellow-600 to-yellow-800' : 'bg-gradient-to-r from-red-600 to-red-800'} text-white font-bold">
+                                ${selectedPackage === 'premium' ? 'PREMIUM' : '34% OFF'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Informações do Jantar -->
                 <div class="mb-8 p-6 rounded-lg bg-gray-800 border-l-4 border-[#00ff88]">
-                    <h2 class="text-2xl font-bold mb-3">Jantar Encantado</h2>
-                    <p class="text-sm text-gray-400 mb-4">Sábado, 13 de dezembro</p>
+                    <h2 class="text-2xl font-bold mb-3">📅 Agenda do Jantar Encantado</h2>
+                    <p class="text-sm text-gray-400 mb-4">Sábado, 13 de dezembro.</p>
                     <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
-                        <div><strong class="text-[#00ff88]">17:20 - 18:20:</strong> Início</div>
-                        <div><strong class="text-[#00ff88]">18:30 - 19:20:</strong> Aperitivo</div>
-                        <div><strong class="text-[#00ff88]">19:30 - 20:30:</strong> Entrada</div>
-                        <div><strong class="text-[#00ff88]">20:50 - 21:30:</strong> Sobremesa</div>
+                        <div><strong class="text-[#00ff88]">17:20:</strong> Início</div>
+                        <div><strong class="text-[#00ff88]">18:30:</strong> Aperitivo</div>
+                        <div><strong class="text-[#00ff88]">19:30:</strong> Entrada</div>
+						<div><strong class="text-[#00ff88]">20:40:</strong> Principal</div>
+                        <div><strong class="text-[#00ff88]">22:00:</strong> Sobremesa</div>
                         <div><strong class="text-[#00ff88]">23:00:</strong> Encerramento</div>
                     </div>
-                    <p class="mt-4 text-xs text-gray-500">Intervalos de 10 a 20 minutos entre os pratos.</p>
+                    <p class="mt-4 text-xs text-gray-500">Intervalos de 10 a 20 minutos entre os pratos para socialização.</p>
                 </div>
 
                 <form id="menu-form" class="space-y-8">
+                    <!-- Nova caixa de erro ESPECÍFICA para o Menu - Exibição no topo -->
+                    <div id="menu-error-message" class="hidden p-4 rounded-lg text-center font-semibold bg-red-700 text-white mb-6">
+                        <!-- Mensagem de erro será inserida aqui pelo JS -->
+                    </div>
+
                     ${Object.keys(menuItems).map(key => {
                         const item = menuItems[key];
                         return `
-                            <div id="group-container-${key}" class="border-t border-gray-700 pt-6">
+                            <!-- Adicionei padding extra e margem para o efeito de erro ser claro -->
+                            <div id="group-container-${key}" class="pt-6 border border-transparent transition-all duration-300">
                                 <h3 class="text-xl font-semibold mb-4 text-[#00ff88] uppercase tracking-wider">${item.title}</h3>
                                 <div id="group-${key}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     ${item.options.map((option, index) => `
@@ -410,10 +1003,10 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                             </div>
                         `;
                     }).join('')}
-
+					<p class="text-center text-gray-400 mb-8">** Selecione todas as opções para personalizar sua experiência</p>
                     <div class="pt-6">
-                        <button type="submit" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase">
-                            Finalizar Reserva
+                        <button type="submit" class="w-full btn-primary p-4 rounded-lg font-bold text-xl uppercase tracking-wider shadow-lg hover:shadow-xl transition-all duration-300">
+                            ✨ FINALIZAR RESERVA
                         </button>
                         <div id="menu-loading" class="hidden text-center mt-4">
                             <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mx-auto"></div>
@@ -424,85 +1017,116 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
         }
 
         function renderSuccessStep() {
-            // Detalhes da Localização Fictícia
-            const fixedAddress = "Rua São Miguel, 42 - Santo Antonio, Viçosa - MG (Localização Exclusiva)";
-            
-            const mapEmbedUrl = `https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15330.134107198124!2d-47.88607175!3d-15.7942289!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935a39626b01b229%3A0xc48742b2f676b7e0!2sPlano%20Piloto%2C%20Bras%C3%ADlia%20-%20DF!5e0!3m2!1spt-BR!2sbr!4v1678896000000!5m2!1spt-BR!2sbr`;
-
             // O nome do convidante agora é pego da variável global ou do objeto de reserva (que foi atualizado em handleMenuSelection apenas para exibição)
             const displayConvidadoPor = convidadoPorNome || reservationData.convidado_por || 'N/A';
+            const pacoteNome = selectedPackage === 'premium' ? 'Experiência Premium (R$ 289,90)' : 'Jantar Encantado VIP (R$ 190,00)';
+            const pacoteEconomia = selectedPackage === 'premium' ? '' : '<p class="text-sm text-green-400 mt-1">🎉 Você economizou R$ 99,90 com a promoção de inauguração!</p>';
 
             return `
                 <div class="text-center p-8">
                     <svg class="mx-auto h-16 w-16 text-[#00ff88]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <h1 class="text-3xl font-bold header-title mt-4 mb-3">Reserva Confirmada!</h1>
-                    <p class="text-lg text-gray-400 mb-6">Sua seleção foi registrada com sucesso.</p>
+                    <h1 class="text-3xl font-bold header-title mt-4 mb-3">🎊 Reserva Confirmada com Sucesso!</h1>
+                    <p class="text-lg text-gray-400 mb-6">Sua experiência encantada está garantida!</p>
 
                     <!-- Detalhes da Reserva e Código -->
-                    <div class="text-left max-w-sm mx-auto p-4 bg-gray-800 rounded-lg mb-6">
-                        <h2 class="text-xl font-bold text-white mb-2">Seus Detalhes</h2>
-                        <p class="text-sm"><strong class="text-[#00ff88]">Nome:</strong> ${reservationData.nome}</p>
-                        <p class="text-sm"><strong class="text-[#00ff88]">Infusão:</strong> ${reservationData.infusao}</p>
-                        
-                        <!-- ID da Reserva -->
-                        <p class="text-sm"><strong class="text-[#00ff88]">ID da Reserva:</strong> <code class="break-all text-xs text-yellow-400">${reservationData.session_id || 'N/A'}</code></p>
-
-                        <!-- ALTERADO: Exibindo Convidado por: [Nome] - Usando a variável global -->
-                        <p class="text-sm"><strong class="text-[#00ff88]">Convidado por:</strong> ${displayConvidadoPor}</p>
-                    </div>
-
-                    <!-- BOX DE CONVITE -->
-                    <div class="text-center max-w-sm mx-auto p-4 rounded-xl mb-6 invite-box">
-                        <h3 class="text-xl font-extrabold text-[#00ff88] uppercase tracking-wider mb-2">Convide um amigo e ganhe desconto!</h3>
-                        <p class="text-sm text-gray-300 italic mb-3">*Envie seu código de cadastro para um amigo e ganhe desconto na sua reserva!</p>
-                        <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
-                            <strong class="text-2xl text-white font-mono">${novoCodigoConvite || 'Falha ao Gerar Código'}</strong>
+                    <div class="text-left max-w-sm mx-auto p-6 bg-gray-800 rounded-xl mb-6 shadow-lg">
+                        <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-[#00ff88]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            Seus Detalhes
+                        </h2>
+                        <div class="space-y-3">
+                            <p class="text-sm"><strong class="text-[#00ff88]">Nome:</strong> ${reservationData.nome}</p>
+                            <p class="text-sm"><strong class="text-[#00ff88]">Infusão:</strong> ${reservationData.infusao}</p>
+                            <p class="text-sm"><strong class="text-[#00ff88]">Pacote:</strong> ${pacoteNome}</p>
+                            ${pacoteEconomia}
+                            <p class="text-sm"><strong class="text-[#00ff88]">ID da Reserva:</strong> <code class="break-all text-xs text-yellow-400 bg-gray-900 p-1 rounded">${reservationData.session_id || 'N/A'}</code></p>
+                            <p class="text-sm"><strong class="text-[#00ff88]">Convidado por:</strong> ${displayConvidadoPor}</p>
                         </div>
                     </div>
 
+                    <!-- Botão de SALVAR DETALHES (Agora com captura de tela automática) -->
+                    <button id="copy-details-btn" class="w-full max-w-sm mx-auto btn-download p-4 rounded-lg font-bold text-lg uppercase mt-6 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transition-all duration-300">
+                        <!-- Icone de Câmera e Disqueto SVG -->
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v10m4-10v10m4-10v10M3 19h18a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        <span>Salvar Detalhes da Reserva</span>
+                    </button>
+
+                    <!-- BOX DE CONVITE -->
+                    <div class="text-center max-w-sm mx-auto p-6 rounded-xl mt-8 mb-8 invite-box shadow-2xl">
+                        <h3 class="text-2xl font-extrabold text-[#00ff88] uppercase tracking-wider mb-3">🎁 Convide um Amigo e Ganhe!</h3>
+                        <p class="text-sm text-gray-300 italic mb-4">*Compartilhe seu código de convite e ambos ganham 15% de desconto na próxima reserva!</p>
+                        <div class="bg-gray-900 p-4 rounded-lg border-2 border-dashed border-gray-700">
+                            <p class="text-sm text-gray-400 mb-2">SEU CÓDIGO EXCLUSIVO:</p>
+                            <strong class="text-3xl text-white font-mono tracking-wider">${novoCodigoConvite || 'Falha ao Gerar Código'}</strong>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-3">Mostre este código na entrada do evento</p>
+                    </div>
+
                     <!-- Cardápio Selecionado -->
-                    <div class="text-left max-w-sm mx-auto p-4 bg-gray-800 rounded-lg mb-6">
-                        <h2 class="text-xl font-bold text-white mb-3">Cardápio Escolhido</h2>
-                        <ul class="list-none pl-0 space-y-2 text-sm">
-                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Aperitivo:</strong> ${reservationData.aperitivo}</li>
-                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Entrada:</strong> ${reservationData.entrada}</li>
-                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Prato Principal:</strong> ${reservationData.principal}</li>
-                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Sobremesa:</strong> ${reservationData.sobremesa}</li>
+                    <div class="text-left max-w-sm mx-auto p-6 bg-gray-800 rounded-xl mb-8 shadow-lg">
+                        <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-[#00ff88]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"></path>
+                            </svg>
+                            Cardápio Personalizado
+                        </h2>
+                        <ul class="list-none pl-0 space-y-3 text-sm">
+                            <li class="p-3 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Aperitivo:</strong> ${reservationData.aperitivo}</li>
+                            <li class="p-3 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Entrada:</strong> ${reservationData.entrada}</li>
+                            <li class="p-3 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Prato Principal:</strong> ${reservationData.principal}</li>
+                            <li class="p-3 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Sobremesa:</strong> ${reservationData.sobremesa}</li>
                             <!-- Bebida -->
-                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Bebida:</strong> ${reservationData.bebida}</li>
+                            <li class="p-3 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Bebida:</strong> ${reservationData.bebida}</li>
                         </ul>
                     </div>
 
                     <!-- Localização e Mapa -->
-                    <div class="text-left max-w-xl mx-auto p-4 bg-gray-800 rounded-lg">
-                        <h2 class="text-xl font-bold text-white mb-3">Local e Horário</h2>
-                        <p class="text-sm mb-2"><strong class="text-[#00ff88]">Início do Jantar:</strong> 17:20h</p>
-                        <p class="text-sm mb-4"><strong class="text-[#00ff88]">Endereço:</strong> ${fixedAddress}</p>
+                    <div class="text-left max-w-xl mx-auto p-6 bg-gray-800 rounded-xl shadow-lg">
+                        <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-[#00ff88]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Local e Horário
+                        </h2>
+                        <div class="space-y-3 mb-6">
+                            <p class="text-sm"><strong class="text-[#00ff88]">⏰ Início do Jantar:</strong> 17:20h</p>
+                            <p class="text-sm"><strong class="text-[#00ff88]">📍 Endereço:</strong> CASA JARDIM : Rua São Miguel, 42 - Santo Antonio, Viçosa - MG</p>
+                            <p class="text-xs text-gray-500">Recomendamos chegar com 15 minutos de antecedência</p>
+                        </div>
                         
-                        <div class="w-full rounded-lg overflow-hidden border-2 border-[#00ff88]">
+                        <div class="w-full rounded-lg overflow-hidden border-2 border-[#00ff88] shadow-lg">
                             <!-- Placeholder do Google Maps -->
-                            <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d342.73249942641183!2d-42.86541750725394!3d-20.74697536769513!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xa367e53d38362f%3A0xf258548877df177e!2sAtelier%20Casa%20Jardim!5e0!3m2!1spt-BR!2sbr!4v1764694602429!5m2!1spt-BR!2sbr" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-
+                            <iframe src="https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d466.3867758726789!2d-42.8654175!3d-20.7469754!3m2!1i1024!2i768!4f13.1!5e0!3m2!1spt-BR!2sbr!4v1764698559557!5m2!1spt-BR!2sbr" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
                         </div>
                     </div>
 
                     <!-- Botão de Impressão/Salvar PDF -->
-                    <button onclick="window.print()" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase mt-8 flex items-center justify-center space-x-2">
+                    <button onclick="window.print()" class="w-full max-w-xl mx-auto btn-primary p-4 rounded-lg font-bold text-lg uppercase mt-10 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transition-all duration-300">
                         <!-- Icone de Impressora SVG -->
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m0 0v-4m0 4h2m-2 0h-2m-2 0h-2m2 0H7m0-4V9a2 2 0 012-2h6a2 2 0 012 2v4m-2 0H9m-2 0h-2"></path>
                         </svg>
-                        <span>Imprimir / Salvar PDF</span>
+                        <span>📄 Imprimir / Salvar PDF da Reserva</span>
                     </button>
 
-                    <p class="mt-6 text-sm text-gray-500">Aguardamos você no Jantar Encantado!</p>
+                    <p class="mt-10 text-lg text-gray-300 font-bold">✨ Aguardamos você para uma noite verdadeiramente encantada! ✨</p>
+                    <p class="mt-2 text-sm text-gray-500">Em caso de dúvidas, entre em contato pelo WhatsApp informado na reserva.</p>
                 </div>
             `;
         }
 
-        // --- Lógica de Ação (Login/Cadastro/Menu) ---
+        // --- Lógica de Ação (Login/Cadastro/Pacote/Menu) ---
 
         /** Processo de login verificando se o código existe na tabela 'login' do Supabase. */
         async function handleLogin(event) {
@@ -538,7 +1162,7 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                     codigoUsado = codigo;
                     convidadoPorNome = data.convite_de || 'Convidante Misterioso'; // <-- Nome do convidante setado globalmente
                     
-                    showMessage("Código válido! Redirecionando para o cadastro...");
+                    showMessage("Código válido! Você tem um convite exclusivo.");
                     currentStep = 'cadastro';
                     render();
                 } else {
@@ -558,16 +1182,20 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
             event.preventDefault();
             const form = event.target;
             
-            const nome = form.nome.value;
-            const telefone = form.telefone.value;
-            const nascimento = form.nascimento.value;
+            const nome = form.nome.value.trim();
+            const telefone = form.telefone.value.trim();
+            
+            // Novos campos de data
+            const dia = form.nascimento_dia.value.trim();
+            const mes = form.nascimento_mes.value.trim();
+            const ano = form.nascimento_ano.value.trim();
+
+            const infusaoInput = form.infusao;
+            let infusao = null;
             
             // LÓGICA INVERTIDA AQUI: Se o checkbox está marcado, NÃO é WhatsApp.
             const isNotWhatsApp = form.whatsapp.checked;
             const whatsapp = isNotWhatsApp ? 'Não' : 'Sim'; 
-
-            const infusaoInput = form.infusao;
-            let infusao = null;
 
             if (infusaoInput instanceof RadioNodeList) {
                 infusao = infusaoInput.value;
@@ -575,10 +1203,16 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                 infusao = infusaoInput.value;
             }
 
-            if (!nome || !telefone || !nascimento || !infusao) {
-                 showMessage("Por favor, preencha todos os campos do cadastro (incluindo o Nível de Infusão).", true);
+            // CRÍTICO: Validação de todos os campos
+            if (!nome || !telefone || !dia || !mes || !ano || !infusao) {
+                 showMessage("Por favor, preencha todos os campos do cadastro (Nome, Telefone, Data de Nascimento completa e Nível de Infusão).", true);
                  return;
             }
+            
+            // Formatação da data (DD/MM/AAAA)
+            // Garante que dia e mês tenham 2 dígitos (ex: 5 -> 05)
+            const formattedNascimento = `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+
 
             // Armazena no objeto de reserva
             reservationData = {
@@ -586,11 +1220,29 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                 nome,
                 telefone,
                 whatsapp, // Agora armazena 'Sim' ou 'Não' com a nova lógica
-                nascimento,
+                nascimento: formattedNascimento, // Data formatada
                 infusao,
                 created_at: new Date().toISOString()
             };
 
+            currentStep = 'pacote';
+            render();
+        }
+
+        /** Lida com a seleção do pacote */
+        function handlePackageSelection(event) {
+            event.preventDefault();
+            const form = event.target;
+            
+            // Obtém o pacote selecionado
+            const selectedPacote = form.pacote.value;
+            selectedPackage = selectedPacote;
+            
+            // Salva a informação do pacote nos dados da reserva
+            reservationData.pacote = selectedPacote;
+            reservationData.valor_pacote = selectedPacote === 'premium' ? '289.90' : '190.00';
+            
+            showMessage(`Pacote ${selectedPacote === 'premium' ? 'Premium' : 'Promocional'} selecionado com sucesso!`);
             currentStep = 'menu';
             render();
         }
@@ -616,39 +1268,81 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
         /** Combina os dados de cadastro e menu, salva na tabela 'clientes' e gera novo código de convite. */
         async function handleMenuSelection(event) {
             event.preventDefault();
+            console.log("Iniciando validação do Menu...");
             const form = event.target;
             const loadingIndicator = document.getElementById('menu-loading');
-
-            // ATUALIZADO: Inclui 'bebida'
+            
+            // 1. VALIDAÇÃO DO MENU - VERIFICAÇÃO SIMPLIFICADA E EFETIVA
             const menuItems = ['aperitivo', 'entrada', 'principal', 'sobremesa', 'bebida'];
-            const menuSelection = {};
-            let isMenuValid = true;
-
-            // Validação visual e coleta de dados
+            let isValid = true;
+            let missingItems = [];
+            
+            // Remove classes de erro anteriores
             menuItems.forEach(key => {
                 const container = document.getElementById(`group-container-${key}`);
-                if (container) { container.classList.remove('validation-error'); }
-            });
-
-            menuItems.forEach(key => {
-                const selectedRadio = form[key].value;
-                if (!selectedRadio) {
-                    isMenuValid = false;
-                    const container = document.getElementById(`group-container-${key}`);
-                    if (container) { container.classList.add('validation-error'); }
+                if (container) {
+                    container.classList.remove('validation-error');
                 }
-                menuSelection[key] = selectedRadio;
             });
-
-            if (!isMenuValid) {
-                showMessage("Atenção! Por favor, selecione uma opção para *todos* os pratos do menu.", true);
-                return;
+            
+            // Verifica cada item do menu
+            menuItems.forEach(key => {
+                const selectedRadio = form.querySelector(`input[name="${key}"]:checked`);
+                if (!selectedRadio) {
+                    isValid = false;
+                    missingItems.push(key);
+                    // Aplica estilo de erro ao container
+                    const container = document.getElementById(`group-container-${key}`);
+                    if (container) {
+                        container.classList.add('validation-error');
+                    }
+                }
+            });
+            
+            // Se não for válido, mostra erro e para a execução
+            if (!isValid) {
+                console.log("Menu não preenchido completamente. Itens faltantes:", missingItems);
+                
+                // Cria uma mensagem de erro amigável
+                const itemNames = {
+                    'aperitivo': 'Aperitivo',
+                    'entrada': 'Entrada',
+                    'principal': 'Prato Principal',
+                    'sobremesa': 'Sobremesa',
+                    'bebida': 'Bebida'
+                };
+                
+                const missingNames = missingItems.map(item => itemNames[item]).join(', ');
+                const errorMessage = `Por favor, selecione uma opção para: ${missingNames}`;
+                
+                // Usa a função showMessage para exibir o erro
+                showMessage(errorMessage, true);
+                
+                // Rola para o primeiro item com erro
+                const firstErrorContainer = document.getElementById(`group-container-${missingItems[0]}`);
+                if (firstErrorContainer) {
+                    firstErrorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                
+                return; // Impede a execução do restante da função
             }
             
+            console.log("Validação do menu concluída com sucesso. Processando reserva...");
+            
+            // Se chegou aqui, todos os campos estão preenchidos
             loadingIndicator.classList.remove('hidden');
-
+            
             try {
-                // 1. Tenta Gerar e Inserir o Novo Código de Convite (Não bloqueia a reserva se falhar)
+                // 2. Coleta os dados do menu
+                const menuSelection = {};
+                menuItems.forEach(key => {
+                    const selectedRadio = form.querySelector(`input[name="${key}"]:checked`);
+                    if (selectedRadio) {
+                        menuSelection[key] = selectedRadio.value;
+                    }
+                });
+                
+                // 3. Tenta Gerar e Inserir o Novo Código de Convite
                 const newCode = generateNewInviteCode(reservationData.nome);
                 novoCodigoConvite = newCode; 
 
@@ -662,19 +1356,16 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                     ]);
 
                 if (loginError) {
-                    // Se a inserção do convite falhar (ex: código duplicado ou RLS), avisamos, mas continuamos a reserva.
-                    console.error("Falha na geração do código de convite na tabela 'login':", loginError.message);
+                    console.error("Falha na geração do código de convite:", loginError.message);
                     showMessage(`Aviso: Falha ao gerar o código de convite. Causa: ${loginError.message}. A reserva continuará.`, true);
                     novoCodigoConvite = "Falha ao Gerar - Verifique RLS";
                 }
 
-                // 2. COMBINA OS DADOS E INSERE NA TABELA 'clientes' (CRÍTICO)
-                // Excluindo 'convidado_por' para evitar erro de schema.
+                // 4. Combina os dados e insere na tabela 'clientes'
                 const finalDataForDB = { 
                     ...reservationData, 
                     ...menuSelection, 
                     codigo_usado: codigoUsado,
-                    // O campo 'convidado_por' FOI REMOVIDO daqui para evitar o erro de schema no Supabase.
                 };
                 
                 const { error: clientesError } = await supabaseClient
@@ -684,13 +1375,13 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                 if (clientesError) {
                     console.error("ERRO CRÍTICO ao salvar na tabela 'clientes':", clientesError.message);
                     showMessage(`ERRO CRÍTICO: Não foi possível salvar sua reserva. Causa: ${clientesError.message || 'Falha desconhecida.'} (VERIFIQUE RLS/SCHEMA DA TABELA CLIENTES)`, true);
-                    return; // Interrompe o processo se a reserva principal falhar
+                    return;
                 }
                 
-                // 3. SUCESSO: Atualiza reservationData COM o nome do convidante APENAS para exibição na tela de sucesso.
+                // 5. SUCESSO: Atualiza reservationData
                 reservationData = { 
                     ...finalDataForDB, 
-                    convidado_por: convidadoPorNome // Adicionado de volta APENAS para uso na função renderSuccessStep
+                    convidado_por: convidadoPorNome
                 };
                 
                 showMessage("Reserva finalizada e salva com sucesso!");
@@ -698,7 +1389,6 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
                 render();
 
             } catch (error) {
-                // Captura qualquer erro de execução de código que não foi capturado acima
                 console.error("Erro Geral no Menu:", error);
                 showMessage(`Erro Geral no Menu: ${error.message || 'Falha desconhecida.'}`, true);
             } finally {
@@ -708,7 +1398,8 @@ const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABAS
 
         // Inicia o processo de inicialização quando a página é carregada
         window.onload = initializeApp;
-
+	
+		
     </script>
 </body>
 </html>
