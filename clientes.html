@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jantar Encantado - Reserva com Convites e Localização</title>
+    <!-- Incluindo Tailwind CSS para estilização moderna e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <!-- Incluindo Supabase Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Estilos personalizados */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Fundo escuro */
+            color: #e5e7eb;
+        }
+        .card {
+            background-color: #161b22; /* Card mais escuro */
+            box-shadow: 0 4px 6px rgba(0, 250, 154, 0.1), 0 1px 3px rgba(0, 250, 154, 0.08);
+        }
+        .header-title {
+            color: #00ff88; /* Verde esmeralda para destaque */
+        }
+        .input-style {
+            background-color: #21262d;
+            border: 1px solid #30363d;
+            color: #e5e7eb;
+        }
+        .btn-primary {
+            background-color: #00ff88;
+            color: #161b22;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:hover {
+            background-color: #00cc66;
+        }
+        .radio-card {
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            border: 2px solid transparent;
+            background-color: #21262d; /* Fundo de card de rádio */
+        }
+        .radio-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 250, 154, 0.2);
+        }
+        /* Estilo para quando o rádio está CHECADO */
+        input[type="radio"]:checked + label .radio-card {
+            border-color: #00ff88;
+            background-color: #00ff881a; /* Fundo levemente verde */
+            box-shadow: 0 0 15px rgba(0, 250, 154, 0.4);
+        }
+        /* Estilo de erro para destacar grupos não preenchidos */
+        .validation-error {
+            border-color: #ff0000;
+            background-color: #ff00001a;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+        /* Estilo para o box de convite na tela final */
+        .invite-box {
+            background: linear-gradient(145deg, #1c232c, #0d1117);
+            border: 2px solid #00ff88;
+            box-shadow: 0 0 20px rgba(0, 250, 154, 0.5);
+        }
+
+        /* Estilos específicos para impressão: esconde elementos desnecessários */
+        @media print {
+            body {
+                background-color: #fff;
+                color: #000;
+            }
+            .card {
+                box-shadow: none !important;
+                border: none !important;
+                background-color: #fff !important;
+            }
+            .btn-primary {
+                display: none; /* Esconde o botão de imprimir */
+            }
+            /* Garante que o conteúdo seja visível na impressão */
+            .header-title, .text-white, .text-[#00ff88], .text-gray-400 {
+                color: #000 !important;
+            }
+            .bg-gray-800, .bg-[#161b22] {
+                background-color: #f0f0f0 !important; /* Fundo claro para seções */
+                color: #000 !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 min-h-screen flex items-start justify-center">
+
+    <div id="app-container" class="w-full max-w-4xl p-6 md:p-10 rounded-xl card my-8">
+        
+        <!-- Área de Mensagens de Status -->
+        <div id="message-area" class="mb-4 hidden">
+            <div id="status-message" class="p-3 rounded-lg text-center font-semibold"></div>
+        </div>
+
+        <!-- Onde o conteúdo de cada etapa será renderizado -->
+        <div id="content">
+            <h1 class="text-3xl font-bold header-title text-center mb-6">Carregando Jantar Encantado...</h1>
+            <div class="flex justify-center items-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-00ff88"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Supabase Logic -->
+    <script type="module">
+        // 🚨 CONFIGURAÇÃO SUPABASE: SUBSTITUA COM SEUS DADOS REAIS 🚨
+		const SUPABASE_URL = 'https://yyayufgoboagvifxanfc.supabase.co'; 
+		const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5YXl1ZmdvYm9hZ3ZpZnhhbmZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MzMzNzksImV4cCI6MjA4MDEwOTM3OX0.fjREIYRCBIVCYNsKFzag2DXi96cavDbRzxblTTUFVDA'; 
+
+
+        // Variáveis globais da aplicação
+        let supabaseClient = null;
+        let userId = null; 
+        let codigoUsado = null; 
+        let convidadoPorNome = null; // Nome de quem convidou (dono do cupom - campo 'convite_de')
+        let novoCodigoConvite = null; // Código gerado pelo cliente
+        let reservationData = {}; 
+        let currentStep = 'loading'; 
+
+        // --- Inicialização e Configuração ---
+
+        function initializeApp() {
+            console.log("1. initializeApp() - Iniciado.");
+
+            // 0. VERIFICAÇÃO DE CONFIGURAÇÃO CRÍTICA
+            if (SUPABASE_URL === 'SUA_URL_DO_SUPABASE' || SUPABASE_ANON_KEY === 'SUA_ANON_KEY_DO_SUPABASE') {
+                console.error("2. ERRO: Chaves do Supabase não configuradas. Mudando para 'error_config'.");
+                currentStep = 'error_config';
+                showMessage("ERRO DE CONFIGURAÇÃO: Por favor, configure as chaves do Supabase no código.", true, true);
+                render();
+                return;
+            }
+
+            // 1. Inicializa o cliente Supabase
+            try {
+                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log("2. Supabase Client - Inicializado com sucesso.");
+            } catch (e) {
+                console.error("3. ERRO CRÍTICO ao criar o cliente Supabase:", e);
+                currentStep = 'error_config';
+                showMessage("Erro ao conectar com Supabase. Verifique as credenciais no Console (F12).", true, true);
+                render();
+                return;
+            }
+
+            // 2. Gera um ID de sessão único
+            userId = crypto.randomUUID();
+            console.log(`3. User ID - Gerado: ${userId}`);
+
+            // 3. Move para a primeira etapa do aplicativo (Login de Código)
+            currentStep = 'login';
+            console.log("4. Transição de Estado - Movendo para 'login'.");
+            render();
+        }
+
+        // --- Funções de Utilitário e UI ---
+
+        /** Exibe uma mensagem de status na tela. Se isPermanent for true, a mensagem não desaparece. */
+        function showMessage(text, isError = false, isPermanent = false) {
+            const messageArea = document.getElementById('message-area');
+            const statusMessage = document.getElementById('status-message');
+            
+            statusMessage.textContent = String(text); 
+            messageArea.classList.remove('hidden');
+            
+            if (isError) {
+                statusMessage.classList.remove('bg-green-700', 'text-white');
+                statusMessage.classList.add('bg-red-700', 'text-white');
+            } else {
+                statusMessage.classList.remove('bg-red-700', 'text-white');
+                statusMessage.classList.add('bg-green-700', 'text-white');
+            }
+            
+            if (!isPermanent) {
+                const duration = isError ? 10000 : 5000;
+                setTimeout(() => messageArea.classList.add('hidden'), duration);
+            }
+        }
+
+        /** Renderiza a UI com base no estado atual da aplicação. */
+        function render() {
+            const contentDiv = document.getElementById('content');
+            let html = '';
+
+            console.log(`RENDER: Estado atual -> ${currentStep}`);
+
+            switch (currentStep) {
+                case 'loading':
+                    html = renderLoadingStep();
+                    break;
+                
+                case 'login':
+                    html = renderLoginStep();
+                    break;
+                
+                case 'cadastro':
+                    html = renderRegistrationStep();
+                    break;
+                
+                case 'menu':
+                    html = renderMenuSelectionStep();
+                    break;
+                
+                case 'success':
+                    html = renderSuccessStep();
+                    break;
+                
+                case 'error_config':
+                    html = renderErrorConfig();
+                    break;
+
+                default:
+                    html = `<h1 class="text-3xl font-bold header-title text-center mb-6 text-red-500">Erro de Estado Desconhecido: ${currentStep}</h1>`;
+                    break;
+            }
+
+            contentDiv.innerHTML = html;
+
+            // Anexa listeners de eventos após a renderização
+            if (currentStep === 'login') {
+                document.getElementById('login-form')?.addEventListener('submit', handleLogin);
+            } else if (currentStep === 'cadastro') {
+                document.getElementById('cadastro-form')?.addEventListener('submit', handleRegistration);
+            } else if (currentStep === 'menu') {
+                document.getElementById('menu-form')?.addEventListener('submit', handleMenuSelection);
+            }
+        }
+
+        // --- Renderização de Etapas ---
+        function renderLoadingStep() {
+            return `
+                <h1 class="text-3xl font-bold header-title text-center mb-6">Aguarde...</h1>
+                <p class="text-center text-gray-400 mb-6">Tentando iniciar o aplicativo...</p>
+                <div class="flex justify-center items-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                </div>
+            `;
+        }
+        
+        function renderErrorConfig() {
+            return `
+                <div class="text-center p-8 bg-red-900/20 rounded-xl border border-red-700/50">
+                    <h1 class="text-3xl font-bold text-red-500 mb-4">ERRO CRÍTICO DE CONFIGURAÇÃO!</h1>
+                    <p class="text-lg text-gray-300 mb-6">
+                        A aplicação não conseguiu inicializar o Supabase.
+                    </p>
+                    <p class="text-red-400 font-bold mb-3">
+                        Por favor, SUBSTITUA os valores placeholder no início do script:
+                    </p>
+                    <pre class="bg-gray-800 p-4 rounded-lg mt-4 text-sm text-left overflow-x-auto border border-red-500">
+const SUPABASE_URL = '<span class="text-yellow-400">SUA_URL_DO_SUPABASE</span>';
+const SUPABASE_ANON_KEY = '<span class="text-yellow-400">SUA_ANON_KEY_DO_SUPABASE</span>';
+                    </pre>
+                    <p class="text-center mt-6 text-gray-500">
+                        Após corrigir os dados (URL e ANONYMOUS KEY), salve e recarregue a página.
+                    </p>
+                </div>
+            `;
+        }
+
+        function renderLoginStep() {
+            return `
+                <h1 class="text-3xl font-bold header-title text-center mb-8">Bem-vindo(a) ao Jantar Encantado</h1>
+                <p class="text-center mb-6 text-gray-400">Insira seu código promocional para acessar a reserva.</p>
+                <form id="login-form" class="max-w-md mx-auto">
+                    <div class="mb-6">
+                        <label for="codigo" class="block text-sm font-medium mb-2">Código de Acesso</label>
+                        <input type="text" id="codigo" name="codigo" required 
+                               class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88]"
+                               placeholder="Ex: PROMO-001">
+                    </div>
+                    <button type="submit" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase">
+                        Acessar
+                    </button>
+                    <div id="login-loading" class="hidden text-center mt-4">
+                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mx-auto"></div>
+                    </div>
+                </form>
+            `;
+        }
+
+        function renderRegistrationStep() {
+            // Exibe o nome do convidante se ele existir
+            const convidadoHtml = convidadoPorNome ? 
+                `<div class="p-3 bg-[#00ff881a] rounded-lg mb-6 border border-[#00ff88] text-[#00ff88]">
+                    <p class="text-center font-semibold">Convidado por: ${convidadoPorNome}</p>
+                 </div>` : '';
+
+            return `
+                <h1 class="text-3xl font-bold header-title text-center mb-8">Passo 1: Seus Dados</h1>
+                ${convidadoHtml}
+                <form id="cadastro-form" class="max-w-xl mx-auto space-y-4">
+                    
+                    <div>
+                        <label for="nome" class="block text-sm font-medium mb-1">Nome Completo</label>
+                        <input type="text" id="nome" name="nome" required 
+                               class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88]"
+                               placeholder="Seu nome">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <!-- Rótulo alterado -->
+                            <label for="telefone" class="block text-sm font-medium mb-1">Celular/Whatsapp</label>
+                            <input type="tel" id="telefone" name="telefone" required 
+                                   class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88]"
+                                   placeholder="(99) 99999-9999">
+                        </div>
+                        <div class="flex items-end pb-3">
+                            <input type="checkbox" id="whatsapp" name="whatsapp" 
+                                   class="h-5 w-5 rounded text-[#00ff88] focus:ring-[#00ff88] border-gray-600 bg-gray-700">
+                            <!-- Texto do checkbox e lógica invertida -->
+                            <label for="whatsapp" class="ml-2 text-sm font-medium">marque aqui se este numero não for whatsapp</label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="nascimento" class="block text-sm font-medium mb-1">Data de Nascimento</label>
+                        <input type="date" id="nascimento" name="nascimento" required 
+                               class="w-full p-3 rounded-lg input-style focus:ring-2 focus:ring-[#00ff88]">
+                    </div>
+
+                    <div class="pt-4">
+                        <label class="block text-base font-medium mb-3 header-title">Nível de Infusão Canábico</label>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            ${['Sem infusão', 'Infusão leve', 'Infusão média', 'Infusão madura'].map((option, index) => `
+                                <div key="${index}">
+                                    <input type="radio" id="infusao${index}" name="infusao" value="${option}" class="hidden" required>
+                                    <label for="infusao${index}" class="block cursor-pointer">
+                                        <div class="radio-card p-4 rounded-lg text-center text-base border-gray-700">
+                                            ${option}
+                                        </div>
+                                    </label>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="pt-6">
+                        <button type="submit" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase">
+                            Continuar para o Menu
+                        </button>
+                    </div>
+                </form>
+            `;
+        }
+
+        function renderMenuSelectionStep() {
+            const menuItems = {
+                aperitivo: { title: 'Aperitivo', options: ['Coxinha de Jaca', 'Bruschetta'] },
+                entrada: { title: 'Entrada', options: ['Creme de abóbora', 'Salada Caesar/Caprese'] },
+                principal: { title: 'Prato Principal', options: ['Nhoc ao molho pesto acompanhado de tiras de carne', 'Risoto de tomate acompanhado de tiras de carne'] },
+                sobremesa: { title: 'Sobremesa', options: ['Iogurte assado com compota de frutas', 'Iogurte assado com compota de frutas (vegano)'] },
+                // ITEM: BEBIDAS
+                bebida: { title: 'Bebida', options: ['Chá de Hibisco', 'Suco de manga'] },
+            };
+
+            return `
+                <h1 class="text-3xl font-bold header-title text-center mb-4">Passo 2: Seleção do Menu</h1>
+                <p class="text-center text-gray-400 mb-8">Por favor, escolha uma opção para cada prato.</p>
+                
+                <!-- Informações do Jantar -->
+                <div class="mb-8 p-6 rounded-lg bg-gray-800 border-l-4 border-[#00ff88]">
+                    <h2 class="text-2xl font-bold mb-3">Jantar Encantado</h2>
+                    <p class="text-sm text-gray-400 mb-4">Sábado, 13 de dezembro</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
+                        <div><strong class="text-[#00ff88]">17:20 - 18:20:</strong> Início</div>
+                        <div><strong class="text-[#00ff88]">18:30 - 19:20:</strong> Aperitivo</div>
+                        <div><strong class="text-[#00ff88]">19:30 - 20:30:</strong> Entrada</div>
+                        <div><strong class="text-[#00ff88]">20:50 - 21:30:</strong> Sobremesa</div>
+                        <div><strong class="text-[#00ff88]">23:00:</strong> Encerramento</div>
+                    </div>
+                    <p class="mt-4 text-xs text-gray-500">Intervalos de 10 a 20 minutos entre os pratos.</p>
+                </div>
+
+                <form id="menu-form" class="space-y-8">
+                    ${Object.keys(menuItems).map(key => {
+                        const item = menuItems[key];
+                        return `
+                            <div id="group-container-${key}" class="border-t border-gray-700 pt-6">
+                                <h3 class="text-xl font-semibold mb-4 text-[#00ff88] uppercase tracking-wider">${item.title}</h3>
+                                <div id="group-${key}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    ${item.options.map((option, index) => `
+                                        <div>
+                                            <input type="radio" id="${key}${index}" name="${key}" value="${option}" class="hidden" required>
+                                            <label for="${key}${index}" class="block cursor-pointer">
+                                                <div class="radio-card p-4 rounded-lg text-base border-gray-700">
+                                                    ${option}
+                                                </div>
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+
+                    <div class="pt-6">
+                        <button type="submit" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase">
+                            Finalizar Reserva
+                        </button>
+                        <div id="menu-loading" class="hidden text-center mt-4">
+                            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mx-auto"></div>
+                        </div>
+                    </div>
+                </form>
+            `;
+        }
+
+        function renderSuccessStep() {
+            // Detalhes da Localização Fictícia
+            const fixedAddress = "Rua São Miguel, 42 - Santo Antonio, Viçosa - MG (Localização Exclusiva)";
+            
+            const mapEmbedUrl = `https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15330.134107198124!2d-47.88607175!3d-15.7942289!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935a39626b01b229%3A0xc48742b2f676b7e0!2sPlano%20Piloto%2C%20Bras%C3%ADlia%20-%20DF!5e0!3m2!1spt-BR!2sbr!4v1678896000000!5m2!1spt-BR!2sbr`;
+
+            // O nome do convidante agora é pego da variável global ou do objeto de reserva (que foi atualizado em handleMenuSelection apenas para exibição)
+            const displayConvidadoPor = convidadoPorNome || reservationData.convidado_por || 'N/A';
+
+            return `
+                <div class="text-center p-8">
+                    <svg class="mx-auto h-16 w-16 text-[#00ff88]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <h1 class="text-3xl font-bold header-title mt-4 mb-3">Reserva Confirmada!</h1>
+                    <p class="text-lg text-gray-400 mb-6">Sua seleção foi registrada com sucesso.</p>
+
+                    <!-- Detalhes da Reserva e Código -->
+                    <div class="text-left max-w-sm mx-auto p-4 bg-gray-800 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-white mb-2">Seus Detalhes</h2>
+                        <p class="text-sm"><strong class="text-[#00ff88]">Nome:</strong> ${reservationData.nome}</p>
+                        <p class="text-sm"><strong class="text-[#00ff88]">Infusão:</strong> ${reservationData.infusao}</p>
+                        
+                        <!-- ID da Reserva -->
+                        <p class="text-sm"><strong class="text-[#00ff88]">ID da Reserva:</strong> <code class="break-all text-xs text-yellow-400">${reservationData.session_id || 'N/A'}</code></p>
+
+                        <!-- ALTERADO: Exibindo Convidado por: [Nome] - Usando a variável global -->
+                        <p class="text-sm"><strong class="text-[#00ff88]">Convidado por:</strong> ${displayConvidadoPor}</p>
+                    </div>
+
+                    <!-- BOX DE CONVITE -->
+                    <div class="text-center max-w-sm mx-auto p-4 rounded-xl mb-6 invite-box">
+                        <h3 class="text-xl font-extrabold text-[#00ff88] uppercase tracking-wider mb-2">Convide um amigo e ganhe desconto!</h3>
+                        <p class="text-sm text-gray-300 italic mb-3">*Envie seu código de cadastro para um amigo e ganhe desconto na sua reserva!</p>
+                        <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
+                            <strong class="text-2xl text-white font-mono">${novoCodigoConvite || 'Falha ao Gerar Código'}</strong>
+                        </div>
+                    </div>
+
+                    <!-- Cardápio Selecionado -->
+                    <div class="text-left max-w-sm mx-auto p-4 bg-gray-800 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-white mb-3">Cardápio Escolhido</h2>
+                        <ul class="list-none pl-0 space-y-2 text-sm">
+                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Aperitivo:</strong> ${reservationData.aperitivo}</li>
+                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Entrada:</strong> ${reservationData.entrada}</li>
+                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Prato Principal:</strong> ${reservationData.principal}</li>
+                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Sobremesa:</strong> ${reservationData.sobremesa}</li>
+                            <!-- Bebida -->
+                            <li class="p-2 rounded-md bg-[#161b22]"><strong class="text-[#00ff88]">Bebida:</strong> ${reservationData.bebida}</li>
+                        </ul>
+                    </div>
+
+                    <!-- Localização e Mapa -->
+                    <div class="text-left max-w-xl mx-auto p-4 bg-gray-800 rounded-lg">
+                        <h2 class="text-xl font-bold text-white mb-3">Local e Horário</h2>
+                        <p class="text-sm mb-2"><strong class="text-[#00ff88]">Início do Jantar:</strong> 17:20h</p>
+                        <p class="text-sm mb-4"><strong class="text-[#00ff88]">Endereço:</strong> ${fixedAddress}</p>
+                        
+                        <div class="w-full rounded-lg overflow-hidden border-2 border-[#00ff88]">
+                            <!-- Placeholder do Google Maps -->
+                            <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d342.73249942641183!2d-42.86541750725394!3d-20.74697536769513!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xa367e53d38362f%3A0xf258548877df177e!2sAtelier%20Casa%20Jardim!5e0!3m2!1spt-BR!2sbr!4v1764694602429!5m2!1spt-BR!2sbr" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+                        </div>
+                    </div>
+
+                    <!-- Botão de Impressão/Salvar PDF -->
+                    <button onclick="window.print()" class="w-full btn-primary p-3 rounded-lg font-semibold uppercase mt-8 flex items-center justify-center space-x-2">
+                        <!-- Icone de Impressora SVG -->
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m0 0v-4m0 4h2m-2 0h-2m-2 0h-2m2 0H7m0-4V9a2 2 0 012-2h6a2 2 0 012 2v4m-2 0H9m-2 0h-2"></path>
+                        </svg>
+                        <span>Imprimir / Salvar PDF</span>
+                    </button>
+
+                    <p class="mt-6 text-sm text-gray-500">Aguardamos você no Jantar Encantado!</p>
+                </div>
+            `;
+        }
+
+        // --- Lógica de Ação (Login/Cadastro/Menu) ---
+
+        /** Processo de login verificando se o código existe na tabela 'login' do Supabase. */
+        async function handleLogin(event) {
+            event.preventDefault();
+            const form = event.target;
+            const codigo = form.codigo.value.trim().toLowerCase();
+            const loadingIndicator = document.getElementById('login-loading');
+
+            if (!codigo) {
+                showMessage("Por favor, insira o código de acesso.", true);
+                return;
+            }
+
+            loadingIndicator.classList.remove('hidden');
+
+            try {
+                // 1. Consulta a tabela 'login'
+                const { data, error } = await supabaseClient
+                    .from('login')
+                    // Seleciona o 'convite_de' para saber quem convidou
+                    .select('codigo, convite_de') 
+                    .eq('codigo', codigo)
+                    .single(); 
+
+                // Tratamento de erro robusto, especialmente para o erro de 'registro não encontrado' (PGRST116)
+                if (error && error.code !== 'PGRST116') { 
+                    showMessage(`Erro Supabase ao consultar código: ${error.message || 'Falha desconhecida.'} (Verifique o RLS)`, true);
+                    return; 
+                }
+
+                if (data && data.codigo) {
+                    // CÓDIGO VÁLIDO: Armazena o código e o nome do convidante
+                    codigoUsado = codigo;
+                    convidadoPorNome = data.convite_de || 'Convidante Misterioso'; // <-- Nome do convidante setado globalmente
+                    
+                    showMessage("Código válido! Redirecionando para o cadastro...");
+                    currentStep = 'cadastro';
+                    render();
+                } else {
+                    // CÓDIGO INVÁLIDO ou não encontrado
+                    showMessage("Código de acesso inválido. Tente novamente.", true);
+                }
+
+            } catch (error) {
+                showMessage(`Erro Geral durante o Login: ${error.message || 'Falha desconhecida.'}`, true);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        /** Lida com o cadastro inicial do usuário e armazena os dados temporariamente. */
+        function handleRegistration(event) {
+            event.preventDefault();
+            const form = event.target;
+            
+            const nome = form.nome.value;
+            const telefone = form.telefone.value;
+            const nascimento = form.nascimento.value;
+            
+            // LÓGICA INVERTIDA AQUI: Se o checkbox está marcado, NÃO é WhatsApp.
+            const isNotWhatsApp = form.whatsapp.checked;
+            const whatsapp = isNotWhatsApp ? 'Não' : 'Sim'; 
+
+            const infusaoInput = form.infusao;
+            let infusao = null;
+
+            if (infusaoInput instanceof RadioNodeList) {
+                infusao = infusaoInput.value;
+            } else if (infusaoInput) {
+                infusao = infusaoInput.value;
+            }
+
+            if (!nome || !telefone || !nascimento || !infusao) {
+                 showMessage("Por favor, preencha todos os campos do cadastro (incluindo o Nível de Infusão).", true);
+                 return;
+            }
+
+            // Armazena no objeto de reserva
+            reservationData = {
+                session_id: userId, // Garante que o ID da sessão esteja no objeto
+                nome,
+                telefone,
+                whatsapp, // Agora armazena 'Sim' ou 'Não' com a nova lógica
+                nascimento,
+                infusao,
+                created_at: new Date().toISOString()
+            };
+
+            currentStep = 'menu';
+            render();
+        }
+
+        /** Gera um novo código de convite baseado no nome do cliente. */
+        function generateNewInviteCode(fullName) {
+            // Remove acentos, caracteres especiais e normaliza para minúsculas.
+            const normalizedName = fullName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            const parts = normalizedName.split(/\s+/).filter(p => p.length > 0);
+            
+            if (parts.length < 2) {
+                return `${parts[0] || 'convite'}420`;
+            }
+            
+            // Combina o primeiro nome com o último sobrenome
+            const firstName = parts[0];
+            const lastName = parts[parts.length - 1]; 
+            
+            return `${firstName}${lastName}420`;
+        }
+
+
+        /** Combina os dados de cadastro e menu, salva na tabela 'clientes' e gera novo código de convite. */
+        async function handleMenuSelection(event) {
+            event.preventDefault();
+            const form = event.target;
+            const loadingIndicator = document.getElementById('menu-loading');
+
+            // ATUALIZADO: Inclui 'bebida'
+            const menuItems = ['aperitivo', 'entrada', 'principal', 'sobremesa', 'bebida'];
+            const menuSelection = {};
+            let isMenuValid = true;
+
+            // Validação visual e coleta de dados
+            menuItems.forEach(key => {
+                const container = document.getElementById(`group-container-${key}`);
+                if (container) { container.classList.remove('validation-error'); }
+            });
+
+            menuItems.forEach(key => {
+                const selectedRadio = form[key].value;
+                if (!selectedRadio) {
+                    isMenuValid = false;
+                    const container = document.getElementById(`group-container-${key}`);
+                    if (container) { container.classList.add('validation-error'); }
+                }
+                menuSelection[key] = selectedRadio;
+            });
+
+            if (!isMenuValid) {
+                showMessage("Atenção! Por favor, selecione uma opção para *todos* os pratos do menu.", true);
+                return;
+            }
+            
+            loadingIndicator.classList.remove('hidden');
+
+            try {
+                // 1. Tenta Gerar e Inserir o Novo Código de Convite (Não bloqueia a reserva se falhar)
+                const newCode = generateNewInviteCode(reservationData.nome);
+                novoCodigoConvite = newCode; 
+
+                const { error: loginError } = await supabaseClient
+                    .from('login')
+                    .insert([
+                        { 
+                            codigo: newCode, 
+                            convite_de: reservationData.nome
+                        }
+                    ]);
+
+                if (loginError) {
+                    // Se a inserção do convite falhar (ex: código duplicado ou RLS), avisamos, mas continuamos a reserva.
+                    console.error("Falha na geração do código de convite na tabela 'login':", loginError.message);
+                    showMessage(`Aviso: Falha ao gerar o código de convite. Causa: ${loginError.message}. A reserva continuará.`, true);
+                    novoCodigoConvite = "Falha ao Gerar - Verifique RLS";
+                }
+
+                // 2. COMBINA OS DADOS E INSERE NA TABELA 'clientes' (CRÍTICO)
+                // Excluindo 'convidado_por' para evitar erro de schema.
+                const finalDataForDB = { 
+                    ...reservationData, 
+                    ...menuSelection, 
+                    codigo_usado: codigoUsado,
+                    // O campo 'convidado_por' FOI REMOVIDO daqui para evitar o erro de schema no Supabase.
+                };
+                
+                const { error: clientesError } = await supabaseClient
+                    .from('clientes')
+                    .insert([finalDataForDB]);
+                
+                if (clientesError) {
+                    console.error("ERRO CRÍTICO ao salvar na tabela 'clientes':", clientesError.message);
+                    showMessage(`ERRO CRÍTICO: Não foi possível salvar sua reserva. Causa: ${clientesError.message || 'Falha desconhecida.'} (VERIFIQUE RLS/SCHEMA DA TABELA CLIENTES)`, true);
+                    return; // Interrompe o processo se a reserva principal falhar
+                }
+                
+                // 3. SUCESSO: Atualiza reservationData COM o nome do convidante APENAS para exibição na tela de sucesso.
+                reservationData = { 
+                    ...finalDataForDB, 
+                    convidado_por: convidadoPorNome // Adicionado de volta APENAS para uso na função renderSuccessStep
+                };
+                
+                showMessage("Reserva finalizada e salva com sucesso!");
+                currentStep = 'success';
+                render();
+
+            } catch (error) {
+                // Captura qualquer erro de execução de código que não foi capturado acima
+                console.error("Erro Geral no Menu:", error);
+                showMessage(`Erro Geral no Menu: ${error.message || 'Falha desconhecida.'}`, true);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        // Inicia o processo de inicialização quando a página é carregada
+        window.onload = initializeApp;
+
+    </script>
+</body>
+</html>
